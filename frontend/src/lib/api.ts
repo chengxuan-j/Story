@@ -120,7 +120,15 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     let msg = `请求失败 (${res.status})`;
     try {
       const data = await res.json();
-      msg = data.detail || msg;
+      const detail = data?.detail;
+      if (typeof detail === 'string') {
+        msg = detail;
+      } else if (Array.isArray(detail)) {
+        const parts = detail
+          .map((item) => (typeof item?.msg === 'string' ? item.msg : ''))
+          .filter(Boolean);
+        if (parts.length > 0) msg = parts.join('；');
+      }
     } catch { /* ignore */ }
     throw new ApiError(msg, res.status);
   }

@@ -53,7 +53,7 @@ export default function CompilationPage() {
       {comp && (
         <div>
           <h1 className="text-2xl font-bold text-ink flex items-center gap-2">
-            <Clapperboard aria-hidden className="h-6 w-6 text-primary" />{comp.title || '一段回忆短片'}
+            <Clapperboard aria-hidden className="h-6 w-6 text-primary" />{comp.prompt_package?.title || comp.title || '一段回忆短片'}
           </h1>
           <p className="mt-1 text-sm text-muted">这里只有文字稿和画面提示词，本系统不替您生成画面。</p>
         </div>

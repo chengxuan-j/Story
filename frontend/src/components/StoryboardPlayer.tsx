@@ -40,6 +40,7 @@ export function StoryboardPlayer({ compilation }: { compilation: Compilation }) 
   const scenes = pkg?.scenes ?? [];
   const [active, setActive] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [finished, setFinished] = useState(false);
   const [tab, setTab] = useState<TabKey>('player');
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -55,13 +56,24 @@ export function StoryboardPlayer({ compilation }: { compilation: Compilation }) 
         if (cancelled) return;
         if (res.audio_url && audioRef.current) {
           audioRef.current.src = res.audio_url;
-          waited = true;
-          await audioRef.current.play().catch(() => {});
+          try {
+            await audioRef.current.play();
+            waited = true;
+          } catch {
+            // 自动播放被拒/音频加载失败：走时长兜底，不要卡死
+            waited = false;
+          }
         }
       } catch { /* TTS 不可用就静默走过 */ }
       if (cancelled) return;
       if (!waited) {
         await new Promise((r) => { timerRef.current = setTimeout(r, scene.duration_seconds * 1000); });
+        if (cancelled) return;
+        if (active + 1 < scenes.length) setActive(active + 1);
+        else {
+          setFinished(true);
+          setPlaying(false);
+        }
       }
     };
     run();
@@ -74,7 +86,23 @@ export function StoryboardPlayer({ compilation }: { compilation: Compilation }) 
 
   const handleEnded = () => {
     if (active + 1 < scenes.length) setActive(active + 1);
-    else setPlaying(false);
+    else {
+      setFinished(true);
+      setPlaying(false);
+    }
+  };
+
+  const togglePlay = () => {
+    if (playing) {
+      setPlaying(false);
+      return;
+    }
+    if (finished) {
+      // 播完后再点，从头开始，而不是只重播最后一段
+      setActive(0);
+      setFinished(false);
+    }
+    setPlaying(true);
   };
 
   if (!pkg || scenes.length === 0) {
@@ -104,9 +132,9 @@ export function StoryboardPlayer({ compilation }: { compilation: Compilation }) 
       {tab === 'player' && (
         <>
           <div className="flex items-center gap-3">
-            <button onClick={() => setPlaying((v) => !v)}
+            <button onClick={togglePlay}
               className="min-h-[48px] px-5 rounded-btn bg-primary hover:bg-primary-strong text-on-primary font-bold">
-              {playing ? '⏸ 暂停' : '▶ 播放'}
+              {playing ? '⏸ 暂停' : finished ? '▶ 重播' : '▶ 播放'}
             </button>
           </div>
           <Placeholder tone={current.emotion_tone}

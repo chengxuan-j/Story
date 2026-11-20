@@ -91,11 +91,12 @@ class SpeechClient:
 
     async def _upload_audio(self, audio_bytes: bytes, filename: str) -> str:
         suffix = os.path.splitext(filename or "")[1].lower()
-        if suffix not in (".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg", ".opus"):
+        if suffix not in (".wav", ".mp3", ".m4a", ".mp4", ".aac", ".flac",
+                          ".ogg", ".webm", ".opus"):
             suffix = ".wav"
-        mime = {".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".aac": "audio/aac",
-                ".flac": "audio/flac", ".ogg": "audio/ogg",
-                ".opus": "audio/ogg"}.get(suffix, "audio/wav")
+        mime = {".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".mp4": "audio/mp4",
+                ".aac": "audio/aac", ".flac": "audio/flac", ".ogg": "audio/ogg",
+                ".webm": "audio/webm", ".opus": "audio/ogg"}.get(suffix, "audio/wav")
 
         client = self._client()
         r = await client.get(

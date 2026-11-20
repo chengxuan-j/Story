@@ -48,7 +48,7 @@ export default function StoryboardListPage() {
           {items.map((c) => (
             <li key={c.id} className="rounded-card border border-hairline bg-card p-4 flex items-center justify-between gap-3 flex-wrap">
               <Link href={`/storyboard/${c.id}`} className="text-lg font-bold text-primary">
-                {c.title || '一段回忆短片'}
+                {c.prompt_package?.title || c.title || '一段回忆短片'}
                 <span className="ml-2 text-sm font-normal text-muted">
                   {c.prompt_package?.scenes.length ?? 0} 段 · 约 {c.prompt_package?.total_seconds ?? 0} 秒
                 </span>

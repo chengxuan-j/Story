@@ -28,6 +28,8 @@ from app.storyboard import StoryboardBuilder
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("story")
 
+MAX_AUDIO_BYTES = 20 * 1024 * 1024
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -218,7 +220,11 @@ async def delete_compilation(comp_id: int):
 
 @app.post("/api/speech/transcribe")
 async def transcribe(file: UploadFile = File(...)):
-    data = await file.read()
+    if file.size is not None and file.size > MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail="录音文件太大（上限 20MB）")
+    data = await file.read(MAX_AUDIO_BYTES + 1)
+    if len(data) > MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail="录音文件太大（上限 20MB）")
     client = SpeechClient()
     try:
         text = await client.transcribe(data, file.filename or "audio.webm")

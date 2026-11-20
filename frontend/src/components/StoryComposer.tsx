@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation';
 import { Clapperboard, Mic, Save, Square, Trash2, Wand2 } from 'lucide-react';
 import { ApiError, api, Story, Turn } from '@/lib/api';
+import { audioExtension } from '@/lib/audio';
 import { DEMO_SCRIPTS, matchScriptReply } from '@/data/demo-stories';
 
 const GREETING = '您想说说哪段往事？随便开个头，我接着问。';
@@ -39,12 +40,18 @@ export function StoryComposer() {
   const [showScripts, setShowScripts] = useState(false);
   const [demo, setDemo] = useState<{ scriptId: string; index: number; playing: boolean } | null>(null);
   const [offered, setOffered] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const usedVoiceRef = useRef(false);
+  const requestSeqRef = useRef(0);
+  const scriptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startingRef = useRef(false);
+  const activeStreamRef = useRef<MediaStream | null>(null);
+  const mountedRef = useRef(true);
 
   const userTurns = turns.filter((t) => t.role === 'user');
   const userCount = userTurns.length;
@@ -53,6 +60,16 @@ export function StoryComposer() {
   const flash = (text: string) => {
     setNotice(text);
     setTimeout(() => setNotice(''), 3000);
+  };
+
+  /** 让仍在飞行中的追问/脚本定时器失效，避免旧回复塞回已清空的对话。 */
+  const cancelPendingReply = () => {
+    requestSeqRef.current += 1;
+    if (scriptTimerRef.current) {
+      clearTimeout(scriptTimerRef.current);
+      scriptTimerRef.current = null;
+    }
+    setThinking(false);
   };
 
   const loadStories = useCallback(async () => {
@@ -72,9 +89,16 @@ export function StoryComposer() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [turns, thinking]);
 
-  useEffect(() => () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop());
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      requestSeqRef.current += 1;
+      if (scriptTimerRef.current) clearTimeout(scriptTimerRef.current);
+      if (timerRef.current) clearInterval(timerRef.current);
+      activeStreamRef.current?.getTracks().forEach((t) => t.stop());
+      mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop());
+    };
   }, []);
 
   useEffect(() => {
@@ -104,21 +128,32 @@ export function StoryComposer() {
   }, [demo, demoScript]);
 
   const startDemo = (scriptId: string) => {
-    setTurns([]); setDraft(''); setError(''); setShowScripts(false);
+    cancelPendingReply();
+    usedVoiceRef.current = false;
+    setTurns([]); setDraft(''); setError(''); setShowScripts(false); setOffered(false);
     setDemo({ scriptId, index: 0, playing: true });
   };
-  const exitDemo = () => { setDemo(null); setTurns([]); setDraft(''); };
+  const exitDemo = () => {
+    cancelPendingReply();
+    usedVoiceRef.current = false;
+    setDemo(null); setTurns([]); setDraft(''); setOffered(false);
+  };
 
   const sendText = async () => {
     const text = draft.trim();
-    if (!text || thinking || saving) return;
+    if (!text || thinking || saving || recording || transcribing || startingRef.current) return;
+    const seq = requestSeqRef.current + 1;
+    requestSeqRef.current = seq;
     const nextTurns: Turn[] = [...turns, { role: 'user', content: text }];
     setTurns(nextTurns); setDraft(''); setError('');
 
-    const scripted = matchScriptReply(text);
+    // 脚本匹配只在演示模式生效，避免真实聊天被 demo 台词劫持
+    const scripted = demo ? matchScriptReply(text) : null;
     if (scripted) {
       setThinking(true);
-      setTimeout(() => {
+      scriptTimerRef.current = setTimeout(() => {
+        scriptTimerRef.current = null;
+        if (seq !== requestSeqRef.current) return;
         setTurns([...nextTurns, { role: 'assistant', content: scripted }]);
         setThinking(false);
       }, 450);
@@ -128,22 +163,27 @@ export function StoryComposer() {
     setThinking(true);
     try {
       const r = await api.nextTurn(nextTurns);
+      if (seq !== requestSeqRef.current) return;
       setTurns([...nextTurns, { role: 'assistant', content: r.question }]);
       if (r.offer) setOffered(true);
     } catch (err) {
+      if (seq !== requestSeqRef.current) return;
       setTurns([...nextTurns, {
         role: 'assistant',
         content: '我这会儿没太听清，您接着说，说完了直接点下面保存也行。',
       }]);
       setError(err instanceof ApiError ? err.message : '追问暂时没接上，不影响保存。');
     } finally {
-      setThinking(false);
+      if (seq === requestSeqRef.current) setThinking(false);
     }
   };
 
   const handleSave = async () => {
+    if (saving || recording || transcribing || starting || startingRef.current) return;
     const content = userTurns.map((t) => t.content.trim()).filter(Boolean).join('\n');
     if (content.length < 2) { setError('再多说一句吧，我还没听明白这段事。'); return; }
+    // 保存后对话会被清空；先让飞行中的追问失效，避免它把旧内容塞回来
+    cancelPendingReply();
     setSaving(true); setError('');
     try {
       const story = await api.createStory({
@@ -162,40 +202,60 @@ export function StoryComposer() {
   };
 
   const startRecording = async () => {
+    if (startingRef.current) return;
     setError('');
     if (typeof window !== 'undefined' &&
         (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)) {
       setError('当前地址下浏览器不给用麦克风：可以先用文字写，或者在电脑上用 localhost 打开再录音。');
       return;
     }
+    startingRef.current = true;
+    setStarting(true);
+    let stream: MediaStream | null = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!mountedRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      activeStreamRef.current = stream;
       const mr = new MediaRecorder(stream);
       chunksRef.current = [];
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: mr.mimeType || 'audio/webm' });
+        stream?.getTracks().forEach((t) => t.stop());
+        if (activeStreamRef.current === stream) activeStreamRef.current = null;
+        if (!mountedRef.current) return;
+        // 浏览器实际产出的格式可能是 webm/ogg/mp4，按真实 MIME 决定后缀
+        const recorderType = mr.mimeType || chunksRef.current[0]?.type || 'audio/webm';
+        const blob = new Blob(chunksRef.current, { type: recorderType });
         if (blob.size === 0) { setError('这次没录到声音，再试一次吧。'); return; }
         setTranscribing(true);
         try {
-          const res = await api.transcribe(blob, 'story.webm');
+          const res = await api.transcribe(blob, `story.${audioExtension(blob.type)}`);
+          if (!mountedRef.current) return;
           const text = (res.text || '').trim();
           if (!text) { setError('没听清，您用文字补一句也行。'); return; }
           usedVoiceRef.current = true;
           setDraft((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
           flash('听好了，没错就点「发送」。');
         } catch (err) {
+          if (!mountedRef.current) return;
           setError(err instanceof ApiError ? err.message : '语音没转成文字，您先用文字说一句。');
         } finally {
-          setTranscribing(false);
+          if (mountedRef.current) setTranscribing(false);
         }
       };
       mediaRecorderRef.current = mr;
       mr.start(1000); setSeconds(0); setRecording(true);
       timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
     } catch {
+      stream?.getTracks().forEach((t) => t.stop());
+      if (activeStreamRef.current === stream) activeStreamRef.current = null;
       setError('没能打开麦克风，您可以先用文字说。');
+    } finally {
+      startingRef.current = false;
+      if (mountedRef.current) setStarting(false);
     }
   };
 
@@ -256,13 +316,13 @@ export function StoryComposer() {
 
         {showScripts && !demo && (
           <div className="mt-3 rounded-card border border-hairline bg-card-soft p-3">
-            <p className="text-sm text-muted">选一段，自动一句句铺开；也可以照着台词念，小忆会按脚本回答。</p>
+            <p className="text-sm text-muted">选一段，自动一句句铺开；铺完可以直接保存成故事。</p>
             <div className="mt-2 flex flex-wrap gap-3">
               {DEMO_SCRIPTS.map((s) => (
                 <button key={s.id} type="button" onClick={() => startDemo(s.id)}
                   className="min-h-[56px] flex-1 min-w-[240px] text-left rounded-btn border border-hairline bg-card px-4 py-3 hover:border-primary">
                   <span className="block text-lg font-bold text-ink">{s.title}
-                    {s.id === 'night-road' && (
+                    {s.id === 'gloves' && (
                       <span className="ml-2 rounded-pill bg-primary px-2 py-0.5 text-xs text-on-primary align-middle">推荐</span>
                     )}
                   </span>
@@ -282,7 +342,7 @@ export function StoryComposer() {
               className="min-h-[44px] px-4 rounded-btn bg-card border border-hairline text-warning font-bold">
               {demo.playing ? '暂停' : '继续'}
             </button>
-            <button type="button" onClick={() => { setTurns([]); setDemo({ scriptId: demo.scriptId, index: 0, playing: true }); }}
+            <button type="button" onClick={() => { setTurns([]); setOffered(false); setDemo({ scriptId: demo.scriptId, index: 0, playing: true }); }}
               className="min-h-[44px] px-4 rounded-btn bg-card border border-hairline text-warning font-bold">重来</button>
             <button type="button" onClick={exitDemo}
               className="min-h-[44px] px-4 rounded-btn bg-card border border-hairline text-muted font-bold">退出演示</button>
@@ -323,9 +383,9 @@ export function StoryComposer() {
                   <Square aria-hidden className="h-5 w-5" />说完了（{seconds} 秒）
                 </button>
               ) : (
-                <button type="button" onClick={startRecording} disabled={transcribing || thinking || saving}
+                <button type="button" onClick={startRecording} disabled={transcribing || thinking || saving || starting}
                   className="min-h-[56px] px-6 rounded-btn bg-card border border-hairline-strong text-primary text-lg font-bold disabled:opacity-50 inline-flex items-center gap-1.5">
-                  <Mic aria-hidden className="h-5 w-5" />用嘴说
+                  <Mic aria-hidden className="h-5 w-5" />{starting ? '正在打开…' : '用嘴说'}
                 </button>
               )}
               <button type="button" onClick={() => void sendText()} disabled={!draft.trim() || thinking || recording || transcribing}
@@ -334,7 +394,7 @@ export function StoryComposer() {
               </button>
               {transcribing && <span className="text-muted text-lg">正在听您说……</span>}
               {userCount > 0 && (
-                <button type="button" onClick={() => { setTurns([]); setDraft(''); usedVoiceRef.current = false; }}
+                <button type="button" onClick={() => { cancelPendingReply(); setTurns([]); setDraft(''); setOffered(false); usedVoiceRef.current = false; }}
                   className="ml-auto min-h-[48px] px-4 rounded-btn bg-card border border-hairline text-muted">重新说一段</button>
               )}
             </div>
@@ -346,7 +406,7 @@ export function StoryComposer() {
         {offered && userCount > 0 && (
           <div className="mt-3 rounded-btn bg-accent-soft border border-primary text-ink p-3 flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm">小忆说这段可以做成短剧了。想做就先存下来，再到下面点「用这段做短片」。</span>
-            <button type="button" onClick={handleSave} disabled={saving}
+            <button type="button" onClick={handleSave} disabled={saving || recording || transcribing || starting}
               className="min-h-[44px] px-4 rounded-btn bg-primary text-on-primary font-bold disabled:opacity-50">
               好，先存下来
             </button>
@@ -357,7 +417,7 @@ export function StoryComposer() {
           <p className="text-sm text-muted">
             {userCount === 0 ? '说一句就能开始，小忆会顺着您的话往下问。' : `已经说了 ${userCount} 句，可以接着说，也可以随时全部存下来。`}
           </p>
-          <button type="button" onClick={handleSave} disabled={saving || userCount === 0}
+          <button type="button" onClick={handleSave} disabled={saving || recording || transcribing || starting || userCount === 0}
             className="min-h-[56px] px-6 rounded-btn bg-primary hover:bg-primary-strong text-on-primary shadow-btn text-lg font-bold disabled:opacity-50 inline-flex items-center gap-1.5">
             <Save aria-hidden className="h-5 w-5" />{saving ? '正在存……' : '存到我的故事'}
           </button>
@@ -385,7 +445,7 @@ export function StoryComposer() {
               <p className="mt-1 text-ink leading-relaxed whitespace-pre-wrap max-h-40 overflow-y-auto">{story.summary}</p>
               {confirmId === story.id ? (
                 <div className="mt-3 flex flex-wrap items-center gap-3 rounded-btn bg-danger-soft p-3">
-                  <p className="text-danger">删掉就找不回来了，确定吗？</p>
+                  <p className="text-danger">删掉这段故事，和用它做过的短片也会一起删掉，找不回来。确定吗？</p>
                   <button type="button" onClick={() => handleDelete(story)} disabled={deletingId === story.id}
                     className="min-h-[48px] px-5 rounded-btn bg-danger text-on-primary font-bold disabled:opacity-50">
                     {deletingId === story.id ? '正在删……' : '确定删除'}
