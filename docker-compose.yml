@@ -1,0 +1,43 @@
+services:
+  # MySQL 8.0：数据持久化到具名卷，重启不丢
+  mysql:
+    image: mysql:8.0
+    container_name: story-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:-story123456}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-story}
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - story-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p${MYSQL_PASSWORD:-story123456} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Story 后端：连上面的 mysql 服务
+  backend:
+    build: ./backend
+    container_name: story-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8100"
+      # 数据库连容器名 story-mysql，不是 127.0.0.1
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-story123456}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-story}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+    ports:
+      - "8100:8100"
+
+volumes:
+  story-mysql-data:

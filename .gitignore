@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# 环境变量与密钥（示例文件 .env.example 仍会提交）
+.env
+.env.*
+!.env.example
+*.log
+
+# 本地业务数据（不入库）
+backend/data/*.db
+backend/data/*.sqlite
+backend/data/*.sqlite3
+
+# 演示视频二进制（体积大，只保留生成脚本与成稿文本）
+docs/demo/video/*.mp4
+docs/demo/video/clips/
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

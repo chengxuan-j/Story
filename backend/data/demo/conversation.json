@@ -1,0 +1,77 @@
+{
+  "note": "离线演示用：一段真实走完陪聊流程的对话，以及从对话里抽出的 4 段往事。可直接喂给 make_demo.py 生成故事板。",
+  "title": "一双手套",
+  "turns": [
+    { "role": "assistant", "content": "您今天有没有想起哪件以前的事？一件小事也行，咱们慢慢聊。" },
+    { "role": "user", "content": "想起一双旧手套。我妈给我缝的。" },
+    { "role": "assistant", "content": "手套啊，那可有年头了。您还记得是什么样子的吗？" },
+    { "role": "user", "content": "蓝布面的，里头絮的是旧棉花。那年冬天冷得厉害，我妈把一件旧棉袄拆了，给我和我弟一人缝了一双。" },
+    { "role": "assistant", "content": "一件旧棉袄变出两双手套，您妈这手真巧。她是啥时候缝的？" },
+    { "role": "user", "content": "晚上。就着一盏煤油灯，我睡醒一觉她还在缝。" },
+    { "role": "assistant", "content": "睡醒一觉还看见她在灯底下缝，那灯芯一定挑得很小吧？后来手套是啥时候戴上的？" },
+    { "role": "user", "content": "第二天早上就戴上了，热的。手冻得跟胡萝卜似的，戴上就不冷了。" },
+    { "role": "assistant", "content": "第二天早上就戴上了，还是热的——这句话真有画面。那年冬天您还干了啥？" },
+    { "role": "user", "content": "开春我爸带我去县里看火车。头一回知道世上还有那么长的车。" },
+    { "role": "assistant", "content": "头一回见火车，那一定把您看住了。您爸是怎么带您去的？" },
+    { "role": "user", "content": "二八自行车，我坐后座上，路是土的，颠得慌。" },
+    { "role": "assistant", "content": "土路颠得慌，您还记得路上看见啥不？" },
+    { "role": "user", "content": "就记得麦子刚返青，绿的。还有我爸棉袄后背上的一块补丁。" },
+    { "role": "assistant", "content": "麦子返青的绿，和棉袄背上那块补丁——这俩我记着了。到了县里，您先看见的是啥？" },
+    { "role": "user", "content": "先是听见响，轰隆轰隆的，然后才看见那么长一条黑的车。" },
+    { "role": "assistant", "content": "先听见响才看见车，这个顺序有意思。回来的时候呢？" },
+    { "role": "user", "content": "回来的路上我坐在后座上，把手套举得高高的，怕风把它吹跑。" },
+    { "role": "assistant", "content": "把手套举得高高的怕风吹跑——这段我想帮您留住。您愿意把它做成一段小短剧吗？" },
+    { "role": "user", "content": "行啊，就这么点事，也能拍？" },
+    { "role": "assistant", "content": "就能拍。就这么点事才好看。" }
+  ],
+  "stories": [
+    {
+      "id": 1,
+      "title": "拆棉袄",
+      "era_tags": ["票证年代"],
+      "time_value": "1975年冬天",
+      "place": "家里灶房",
+      "emotion_tone": "辛酸",
+      "summary": "母亲把一件旧棉袄拆了，给兄弟俩各缝一双手套",
+      "raw_dialogue": [
+        { "role": "user", "content": "那年冬天冷得厉害，我妈把一件旧棉袄拆了，给我和我弟一人缝了一双。" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "灯底下",
+      "era_tags": ["票证年代"],
+      "time_value": "1975年冬天",
+      "place": "家里灶房",
+      "emotion_tone": "怀念",
+      "summary": "母亲就着一盏煤油灯缝了一夜",
+      "raw_dialogue": [
+        { "role": "user", "content": "晚上缝的，就着一盏煤油灯，我睡醒一觉她还在缝。" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "去看火车",
+      "era_tags": ["票证年代"],
+      "time_value": "1976年春天",
+      "place": "县城铁道边",
+      "emotion_tone": "兴奋",
+      "summary": "父亲骑车带我去县城，头一回看见火车",
+      "raw_dialogue": [
+        { "role": "user", "content": "开春我爸带我去县里看火车，头一回知道世上还有那么长的车。" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "回来的路上",
+      "era_tags": ["票证年代"],
+      "time_value": "1976年春天",
+      "place": "回村的土路",
+      "emotion_tone": "留恋",
+      "summary": "回来的路上我把手套举得高高的，怕风把它吹跑",
+      "raw_dialogue": [
+        { "role": "user", "content": "回来的路上我坐在后座上，把手套举得高高的，怕风把它吹跑。" }
+      ]
+    }
+  ]
+}

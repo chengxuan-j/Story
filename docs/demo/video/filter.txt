@@ -1,0 +1,9 @@
+[0:v]crop=1180:673:130:52,scale=1344:768,fps=24,setsar=1,format=yuv420p[v0];
+[1:v]crop=1180:673:130:52,scale=1344:768,fps=24,setsar=1,format=yuv420p[v1];
+[2:v]crop=1180:673:130:52,scale=1344:768,fps=24,setsar=1,format=yuv420p[v2];
+[v0][v1]xfade=transition=fade:duration=0.6:offset=4.5667[x1];
+[x1][v2]xfade=transition=fade:duration=0.6:offset=9.1333[x2];
+[x2]fade=t=in:st=0:d=0.8,fade=t=out:st=13.3:d=1.0,
+drawtext=fontfile='C\:/Windows/Fonts/msyh.ttc':text='一双手套':fontcolor=white:fontsize=74:borderw=4:bordercolor=black@0.32:x=(w-text_w)/2:y=(h-text_h)*0.30:alpha='if(lt(t,1.0),0,if(lt(t,1.8),(t-1.0)/0.8,if(lt(t,3.5),1,if(lt(t,4.3),(4.3-t)/0.8,0))))',
+drawtext=fontfile='C\:/Windows/Fonts/msyh.ttc':text='1976 年 · 河北':fontcolor=white@0.95:fontsize=30:borderw=3:bordercolor=black@0.42:x=(w-text_w)/2:y=(h-text_h)*0.30+112:alpha='if(lt(t,1.4),0,if(lt(t,2.2),(t-1.4)/0.8,if(lt(t,3.5),1,if(lt(t,4.3),(4.3-t)/0.8,0))))'
+[vout]
